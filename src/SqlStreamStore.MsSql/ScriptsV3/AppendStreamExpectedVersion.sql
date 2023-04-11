@@ -3,6 +3,8 @@ DECLARE @latestStreamVersion AS INT;
 DECLARE @latestStreamPosition AS BIGINT;
 DECLARE @maxCount as INT;
 
+BEGIN TRANSACTION AppendStream;
+
     SELECT @streamIdInternal = dbo.Streams.IdInternal,
            @latestStreamVersion = dbo.Streams.[Version]
     FROM dbo.Streams WITH (UPDLOCK, ROWLOCK)
@@ -10,11 +12,13 @@ DECLARE @maxCount as INT;
 
     IF @streamIdInternal IS NULL
         BEGIN
+            ROLLBACK TRANSACTION AppendStream;
             RAISERROR('WrongExpectedVersion', 16, 1);
             RETURN;
         END
     IF @latestStreamVersion != @expectedStreamVersion
         BEGIN
+            ROLLBACK TRANSACTION AppendStream;
             RAISERROR('WrongExpectedVersion', 16, 2);
             RETURN;
         END
@@ -35,6 +39,7 @@ DECLARE @maxCount as INT;
             dbo.Streams.[Position] = @latestStreamPosition
       WHERE dbo.Streams.IdInternal = @streamIdInternal
 
+COMMIT TRANSACTION AppendStream;
 
    SELECT currentVersion = @latestStreamVersion,
           currentPosition = @latestStreamPosition,

@@ -20,7 +20,7 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 (page, _) = await ReadStreamInternal(
                     streamIdInfo.MetadataSqlStreamId,
                     StreamVersion.End,
@@ -69,7 +69,7 @@
             {
                 var streamIdInfo = new StreamIdInfo(streamId);
 
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 var transaction = WithTransaction(connection);
 

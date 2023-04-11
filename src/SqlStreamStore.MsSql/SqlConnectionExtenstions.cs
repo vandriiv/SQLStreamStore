@@ -12,7 +12,7 @@ namespace SqlStreamStore
         {
             if (dbConnection.State!= ConnectionState.Open)
             {
-                await dbConnection.OpenAsync(cancellationToken).NotOnCapturedContext();
+                await dbConnection.OpenAsync(cancellationToken);
             }
         }
     }

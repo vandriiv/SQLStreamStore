@@ -22,7 +22,7 @@
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(
                     streamIdInfo.SqlStreamId,
@@ -47,7 +47,7 @@
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(
                     streamIdInfo.SqlStreamId,
@@ -114,10 +114,9 @@
                 command.Parameters.AddWithValue("streamVersion", streamVersion);
 
                 using(var reader = await command
-                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
-                    .NotOnCapturedContext())
+                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken))
                 {
-                    await reader.ReadAsync(cancellationToken).NotOnCapturedContext();
+                    await reader.ReadAsync(cancellationToken);
                     if(reader.IsDBNull(0))
                     {
                         return new ReadStreamPage(
@@ -134,9 +133,9 @@
                     var lastStreamVersion = reader.GetInt32(0);
                     var lastStreamPosition = reader.GetInt64(1);
 
-                    await reader.NextResultAsync(cancellationToken).NotOnCapturedContext();
+                    await reader.NextResultAsync(cancellationToken);
                     var messages = new List<StreamMessage>();
-                    while (await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
+                    while (await reader.ReadAsync(cancellationToken))
                     {
                         if(messages.Count == count)
                         {
@@ -202,20 +201,16 @@
         {
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 using(var command = new SqlCommand(_scripts.ReadMessageData, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = streamId });
                     command.Parameters.AddWithValue("streamVersion", streamVersion);
 
-                    using(var reader = await command
-                        .ExecuteReaderAsync(
-                            CommandBehavior.SequentialAccess | CommandBehavior.SingleRow, 
-                            cancellationToken)
-                        .NotOnCapturedContext())
+                    using(var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleRow, cancellationToken))
                     {
-                        if(await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
+                        if(await reader.ReadAsync(cancellationToken))
                         {
                             return await reader.GetTextReader(0).ReadToEndAsync();
                         }

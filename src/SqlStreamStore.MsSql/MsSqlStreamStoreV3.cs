@@ -87,7 +87,7 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 if (_scripts.Schema != "dbo")
                 {
@@ -104,7 +104,7 @@
                         command.CommandTimeout = _commandTimeout;
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
-                            .NotOnCapturedContext();
+                            ;
                     }
                 }
 
@@ -113,7 +113,7 @@
                     command.CommandTimeout = _commandTimeout;
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
                 }
             }
             finally
@@ -138,14 +138,14 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var command = new SqlCommand(_scripts.GetSchemaVersion, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     var extendedProperties =  await command
                         .ExecuteReaderAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     int? version = null;
                     while(await extendedProperties.ReadAsync(cancellationToken))
@@ -184,14 +184,14 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.DropAll, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
                 }
             }
             finally
@@ -212,7 +212,7 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var command = new SqlCommand(_scripts.GetStreamMessageCount, connection))
                 {
@@ -222,7 +222,7 @@
 
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     return (int)result;
                 }
@@ -274,14 +274,14 @@
                 var migrateConnection = _createConnection();
                 try
                 {
-                    await migrateConnection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                    await migrateConnection.OpenIfRequiredAsync(cancellationToken);
 
                     using(var command = new SqlCommand(_scripts.Migration_v3, migrateConnection))
                     {
                         command.CommandTimeout = _commandTimeout;
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
-                            .NotOnCapturedContext();
+                            ;
                     }
                 }
                 finally
@@ -328,7 +328,7 @@
                         var connection = _createConnection();
                         try
                         {
-                            await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                            await connection.OpenIfRequiredAsync(cancellationToken);
 
                             using(var command = new SqlCommand(_scripts.SetStreamMetadata, connection))
                             {
@@ -368,14 +368,14 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadHeadPosition, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     if(result == DBNull.Value)
                     {
@@ -400,7 +400,7 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var command = new SqlCommand(_scripts.ReadStreamHeadPosition, connection))
                 {
@@ -408,7 +408,7 @@
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = new StreamIdInfo(streamId).SqlStreamId.Id });
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     if (result == null)
                     {
@@ -434,7 +434,7 @@
             var connection = _createConnection();
             try
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadStreamHeadVersion, connection))
                 {
@@ -442,7 +442,7 @@
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = new StreamIdInfo(streamId).SqlStreamId.Id });
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     if(result == null)
                     {

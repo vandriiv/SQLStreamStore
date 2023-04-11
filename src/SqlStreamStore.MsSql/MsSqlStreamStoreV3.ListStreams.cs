@@ -26,14 +26,14 @@ namespace SqlStreamStore
             {
                 var streamIds = new List<string>();
 
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 var transaction = WithTransaction(connection);
                 using(var command = GetListStreamsCommand(pattern, maxCount, afterIdInternal, transaction))
                 {
                     command.CommandTimeout = _commandTimeout;
-                    using(var reader = await command.ExecuteReaderAsync(cancellationToken).NotOnCapturedContext())
+                    using(var reader = await command.ExecuteReaderAsync(cancellationToken))
                     {
-                        while(await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
+                        while(await reader.ReadAsync(cancellationToken))
                         {
                             streamIds.Add(reader.GetString(0));
                             afterIdInternal = reader.GetInt32(1);

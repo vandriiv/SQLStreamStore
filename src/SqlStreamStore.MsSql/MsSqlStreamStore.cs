@@ -80,7 +80,7 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 if(_scripts.Schema != "dbo")
                 {
@@ -98,7 +98,7 @@
 
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
-                            .NotOnCapturedContext();
+                            ;
                     }
                 }
 
@@ -107,7 +107,7 @@
                     command.CommandTimeout = _commandTimeout;
 
                     await command.ExecuteNonQueryAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
                 }
             }
         }
@@ -118,7 +118,7 @@
 
             using (var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 if (_scripts.Schema != "dbo")
                 {
@@ -136,7 +136,7 @@
 
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
-                            .NotOnCapturedContext();
+                            ;
                     }
                 }
 
@@ -145,7 +145,7 @@
                     command.CommandTimeout = _commandTimeout;
 
                     await command.ExecuteNonQueryAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
                 }
             }
         }
@@ -162,7 +162,7 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var command = new SqlCommand(_scripts.GetSchemaVersion, connection))
                 {
@@ -170,7 +170,7 @@
 
                     var extendedProperties =  await command
                         .ExecuteReaderAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     int? version = null;
                     while(await extendedProperties.ReadAsync(cancellationToken))
@@ -199,7 +199,7 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.DropAll, connection))
                 {
@@ -207,7 +207,7 @@
 
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
                 }
             }
         }
@@ -220,7 +220,7 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.GetStreamMessageCount, connection))
                 {
@@ -230,7 +230,7 @@
 
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     return (int) result;
                 }
@@ -246,7 +246,7 @@
 
             using (var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var command = new SqlCommand(_scripts.GetStreamMessageBeforeCreatedCount, connection))
                 {
@@ -257,7 +257,7 @@
 
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     return (int)result;
                 }
@@ -270,14 +270,14 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadHeadPosition, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     if(result == DBNull.Value)
                     {
@@ -294,7 +294,7 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadStreamHeadPosition, connection))
                 {
@@ -302,7 +302,7 @@
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = new StreamIdInfo(streamId).SqlStreamId.Id });
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     if(result == null)
                     {
@@ -319,7 +319,7 @@
 
             using(var connection = _createConnection())
             {
-                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadStreamHeadVersion, connection))
                 {
@@ -327,7 +327,7 @@
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = new StreamIdInfo(streamId).SqlStreamId.Id });
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .NotOnCapturedContext();
+                        ;
 
                     if(result == null)
                     {
