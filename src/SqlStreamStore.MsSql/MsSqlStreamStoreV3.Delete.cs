@@ -6,6 +6,7 @@ namespace SqlStreamStore
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
     using static Streams.Deleted;
 
     public partial class MsSqlStreamStoreV3
@@ -26,39 +27,49 @@ namespace SqlStreamStore
             Guid eventId,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
-                using (var transaction = connection.BeginTransaction())
+                var transaction = WithTransaction(connection);
+                var sqlStreamId = new StreamIdInfo(streamId).SqlStreamId;
+
+                bool deleted;
+                using (var command = new SqlCommand(_scripts.DeleteStreamMessage, connection, transaction))
                 {
-                    var sqlStreamId = new StreamIdInfo(streamId).SqlStreamId;
+                    command.CommandTimeout = _commandTimeout;
+                    command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = sqlStreamId.Id });
+                    command.Parameters.AddWithValue("eventId", eventId);
+                    var count = await command
+                        .ExecuteScalarAsync(cancellationToken)
+                        .NotOnCapturedContext();
 
-                    bool deleted;
-                    using (var command = new SqlCommand(_scripts.DeleteStreamMessage, connection, transaction))
-                    {
-                        command.CommandTimeout = _commandTimeout;
-                        command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = sqlStreamId.Id });
-                        command.Parameters.AddWithValue("eventId", eventId);
-                        var count  = await command
-                            .ExecuteScalarAsync(cancellationToken)
-                            .ConfigureAwait(false);
+                    deleted = (int)count == 1;
+                }
 
-                        deleted = (int)count == 1;
-                    }
+                if (deleted && !_settings.DisableDeletionTracking)
+                {
+                    var eventDeletedEvent = CreateMessageDeletedMessage(sqlStreamId.IdOriginal, eventId);
+                    await AppendToStreamExpectedVersionAny(
+                        connection,
+                        transaction,
+                        SqlStreamId.Deleted,
+                        new[] { eventDeletedEvent },
+                        cancellationToken);
+                }
 
-                    if(deleted && !_settings.DisableDeletionTracking)
-                    {
-                        var eventDeletedEvent = CreateMessageDeletedMessage(sqlStreamId.IdOriginal, eventId);
-                        await AppendToStreamExpectedVersionAny(
-                            connection,
-                            transaction,
-                            SqlStreamId.Deleted,
-                            new[] { eventDeletedEvent },
-                            cancellationToken);
-                    }
-
+                if (_manageConnection)
+                {
                     transaction.Commit();
+                    transaction.Dispose();
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -68,53 +79,67 @@ namespace SqlStreamStore
             int expectedVersion,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
 
-                using(var transaction = connection.BeginTransaction())
+                var transaction = WithTransaction(connection);
+                using (var command = new SqlCommand(_scripts.DeleteStreamExpectedVersion, connection, transaction))
                 {
-                    using(var command = new SqlCommand(_scripts.DeleteStreamExpectedVersion, connection, transaction))
+                    command.CommandTimeout = _commandTimeout;
+                    command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = streamIdInfo.SqlStreamId.Id });
+                    command.Parameters.AddWithValue("expectedStreamVersion", expectedVersion);
+                    try
                     {
-                        command.CommandTimeout = _commandTimeout;
-                        command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = streamIdInfo.SqlStreamId.Id });
-                        command.Parameters.AddWithValue("expectedStreamVersion", expectedVersion);
-                        try
-                        {
-                            await command
-                                .ExecuteNonQueryAsync(cancellationToken)
-                                .ConfigureAwait(false);
-                        }
-                        catch(SqlException ex)
+                        await command
+                            .ExecuteNonQueryAsync(cancellationToken)
+                            .NotOnCapturedContext();
+                    }
+                    catch (SqlException ex)
+                    {
+                        if (_manageConnection)
                         {
                             transaction.Rollback();
-                            if(ex.Message.StartsWith("WrongExpectedVersion"))
-                            {
-                                throw new WrongExpectedVersionException(
-                                    ErrorMessages.DeleteStreamFailedWrongExpectedVersion(streamIdInfo.SqlStreamId.IdOriginal, expectedVersion),
-                                    streamIdInfo.SqlStreamId.IdOriginal,
-                                    expectedVersion,
-                                    ex);
-                            }
-                            throw;
+                            transaction.Dispose();
                         }
-
-                        if(!_settings.DisableDeletionTracking)
+                        if (ex.Message.StartsWith("WrongExpectedVersion"))
                         {
-                            var streamDeletedEvent = CreateStreamDeletedMessage(streamIdInfo.SqlStreamId.IdOriginal);
-                            await AppendToStreamExpectedVersionAny(
-                                connection,
-                                transaction,
-                                SqlStreamId.Deleted,
-                                new[] { streamDeletedEvent },
-                                cancellationToken);
+                            throw new WrongExpectedVersionException(
+                                ErrorMessages.DeleteStreamFailedWrongExpectedVersion(streamIdInfo.SqlStreamId.IdOriginal, expectedVersion),
+                                streamIdInfo.SqlStreamId.IdOriginal,
+                                expectedVersion,
+                                ex);
                         }
-
-                        // Delete metadata stream (if it exists)
-                        await DeleteStreamAnyVersion(connection, transaction, streamIdInfo.MetadataSqlStreamId, cancellationToken);
-
-                        transaction.Commit();
+                        throw;
                     }
+
+                    if (!_settings.DisableDeletionTracking)
+                    {
+                        var streamDeletedEvent = CreateStreamDeletedMessage(streamIdInfo.SqlStreamId.IdOriginal);
+                        await AppendToStreamExpectedVersionAny(
+                            connection,
+                            transaction,
+                            SqlStreamId.Deleted,
+                            new[] { streamDeletedEvent },
+                            cancellationToken);
+                    }
+
+                    // Delete metadata stream (if it exists)
+                    await DeleteStreamAnyVersion(connection, transaction, streamIdInfo.MetadataSqlStreamId, cancellationToken);
+
+                    if (_manageConnection)
+                    {
+                        transaction.Commit();
+                        transaction.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -123,18 +148,29 @@ namespace SqlStreamStore
             StreamIdInfo streamIdInfo,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
-                using (var transaction = connection.BeginTransaction())
+                var transaction = WithTransaction(connection);
+
+                await DeleteStreamAnyVersion(connection, transaction, streamIdInfo.SqlStreamId, cancellationToken);
+
+                // Delete metadata stream (if it exists)
+                await DeleteStreamAnyVersion(connection, transaction, streamIdInfo.MetadataSqlStreamId, cancellationToken);
+
+                if (_manageConnection)
                 {
-                    await DeleteStreamAnyVersion(connection, transaction, streamIdInfo.SqlStreamId, cancellationToken);
-
-                    // Delete metadata stream (if it exists)
-                    await DeleteStreamAnyVersion(connection, transaction, streamIdInfo.MetadataSqlStreamId, cancellationToken);
-
                     transaction.Commit();
+                    transaction.Dispose();
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -152,7 +188,7 @@ namespace SqlStreamStore
                 command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = sqlStreamId.Id });
                 var i = await command
                     .ExecuteScalarAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                    .NotOnCapturedContext();
 
                 aStreamIsDeleted = (int)i > 0;
             }

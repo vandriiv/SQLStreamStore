@@ -1,8 +1,6 @@
 DECLARE @streamIdInternal AS INT;
 DECLARE @maxCount as INT;
 
-BEGIN TRANSACTION CreateStreamIfNotExists;
-
     IF NOT EXISTS (
         SELECT *
         FROM dbo.Streams WITH (NOLOCK)
@@ -66,10 +64,6 @@ BEGIN TRANSACTION CreateStreamIfNotExists;
               END
         END
 
-COMMIT TRANSACTION CreateStreamIfNotExists;
-
-BEGIN TRANSACTION AppendStream;
-
     DECLARE @latestStreamVersion AS INT;
     DECLARE @latestStreamPosition AS BIGINT;
 
@@ -104,7 +98,6 @@ BEGIN TRANSACTION AppendStream;
             SET @latestStreamVersion = ISNULL(@latestStreamVersion, -1)
         END
 
-COMMIT TRANSACTION AppendStream;
 
    SELECT currentVersion = @latestStreamVersion,
           currentPosition = @latestStreamPosition,

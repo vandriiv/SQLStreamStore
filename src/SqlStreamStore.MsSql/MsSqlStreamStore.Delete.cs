@@ -6,6 +6,7 @@ namespace SqlStreamStore
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
     using static Streams.Deleted;
 
     public partial class MsSqlStreamStore
@@ -29,7 +30,7 @@ namespace SqlStreamStore
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var transaction = connection.BeginTransaction())
                 {
@@ -43,7 +44,7 @@ namespace SqlStreamStore
                         command.Parameters.AddWithValue("eventId", eventId);
                         var count  = await command
                             .ExecuteScalarAsync(cancellationToken)
-                            .ConfigureAwait(false);
+                            .NotOnCapturedContext();
 
                         deleted = (int)count == 1;
                     }
@@ -71,7 +72,7 @@ namespace SqlStreamStore
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
 
                 using(var transaction = connection.BeginTransaction())
                 {
@@ -84,7 +85,7 @@ namespace SqlStreamStore
                         {
                             await command
                                 .ExecuteNonQueryAsync(cancellationToken)
-                                .ConfigureAwait(false);
+                                .NotOnCapturedContext();
                         }
                         catch(SqlException ex)
                         {
@@ -123,7 +124,7 @@ namespace SqlStreamStore
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var transaction = connection.BeginTransaction())
                 {
@@ -150,7 +151,7 @@ namespace SqlStreamStore
                 command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = sqlStreamId.Id });
                 var i = await command
                     .ExecuteScalarAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                    .NotOnCapturedContext();
 
                 aStreamIsDeleted = (int)i > 0;
             }

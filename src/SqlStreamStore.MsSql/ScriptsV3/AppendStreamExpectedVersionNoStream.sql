@@ -3,8 +3,6 @@ DECLARE @latestStreamVersion AS INT;
 DECLARE @latestStreamPosition AS BIGINT;
 DECLARE @maxCount as INT;
 
-BEGIN TRANSACTION CreateStream;
-
     BEGIN
 
         INSERT INTO dbo.Streams
@@ -88,8 +86,6 @@ BEGIN TRANSACTION CreateStream;
                     END
 
     END;
-
-COMMIT TRANSACTION CreateStream;
 
    SELECT currentVersion = @latestStreamVersion,
           currentPosition = @latestStreamPosition,

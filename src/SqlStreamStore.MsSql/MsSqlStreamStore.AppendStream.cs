@@ -10,6 +10,7 @@
     using Microsoft.Data.SqlClient.Server;
     using SqlStreamStore.Imports.Ensure.That;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
     using StreamStoreStore.Json;
 
     public partial class MsSqlStreamStore
@@ -42,7 +43,7 @@
             MsSqlAppendResult result;
             using(var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
                 var streamIdInfo = new StreamIdInfo(streamId);
                 result = await AppendToStreamInternal(connection, null, streamIdInfo.SqlStreamId, expectedVersion,
                     messages, cancellationToken);
@@ -163,15 +164,15 @@
                 {
                     using(var reader = await command
                         .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                        .NotOnCapturedContext())
                     {
-                        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.ReadAsync(cancellationToken).NotOnCapturedContext();
                         var currentVersion = reader.GetInt32(0);
                         var currentPosition = reader.GetInt64(1);
                         int? maxCount = null;
 
                         await reader.NextResultAsync(cancellationToken);
-                        if(await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        if(await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
                         {
                             var jsonData = reader.GetString(0);
                             var metadataMessage = SimpleJson.DeserializeObject<MetadataMessage>(jsonData);
@@ -205,7 +206,7 @@
                         connection,
                         transaction,
                         cancellationToken)
-                        .ConfigureAwait(false);
+                        .NotOnCapturedContext();
 
                     if(messages.Length > page.Messages.Length)
                     {
@@ -275,16 +276,16 @@
                 {
                     using(var reader = await command
                         .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                        .NotOnCapturedContext())
                     {
-                        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.ReadAsync(cancellationToken).NotOnCapturedContext();
                         var currentVersion = reader.GetInt32(0);
                         var currentPosition = reader.GetInt64(1);
                         int? maxCount = null;
 
-                        await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.NextResultAsync(cancellationToken).NotOnCapturedContext();
 
-                        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        if (await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
                         {
                             var jsonData = reader.GetString(0);
                             var metadataMessage = SimpleJson.DeserializeObject<MetadataMessage>(jsonData);
@@ -310,7 +311,7 @@
                                 connection,
                                 transaction,
                                 cancellationToken)
-                            .ConfigureAwait(false);
+                            .NotOnCapturedContext();
 
                         if(messages.Length > page.Messages.Length)
                         {
@@ -375,16 +376,16 @@
                 {
                     using (var reader = await command
                         .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                        .NotOnCapturedContext())
                     {
-                        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.ReadAsync(cancellationToken).NotOnCapturedContext();
                         var currentVersion = reader.GetInt32(0);
                         var currentPosition = reader.GetInt64(1);
                         int? maxCount = null;
 
-                        await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.NextResultAsync(cancellationToken).NotOnCapturedContext();
 
-                        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        if (await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
                         {
                             var jsonData = reader.GetString(0);
                             var metadataMessage = SimpleJson.DeserializeObject<MetadataMessage>(jsonData);
@@ -494,7 +495,7 @@
                 command.Parameters.AddWithValue("messageId", messageId);
 
                 var result = await command.ExecuteScalarAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                    .NotOnCapturedContext();
 
                 return (int) result;
             }

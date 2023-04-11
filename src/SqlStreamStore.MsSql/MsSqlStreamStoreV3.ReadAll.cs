@@ -8,6 +8,7 @@ namespace SqlStreamStore
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
 
     public partial class MsSqlStreamStoreV3
     {
@@ -20,10 +21,10 @@ namespace SqlStreamStore
         {
             maxCount = maxCount == int.MaxValue ? maxCount - 1 : maxCount;
             long position = fromPosition;
-
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
 
                 var commandText = prefetch ? _scripts.ReadAllForwardWithData : _scripts.ReadAllForward;
                 using (var command = new SqlCommand(commandText, connection))
@@ -33,7 +34,7 @@ namespace SqlStreamStore
                     command.Parameters.AddWithValue("count", maxCount + 1); //Read extra row to see if at end or not
                     var reader = await command
                         .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
-                        .ConfigureAwait(false);
+                        .NotOnCapturedContext();
 
                     if (!reader.HasRows)
                     {
@@ -48,7 +49,7 @@ namespace SqlStreamStore
 
                     var messages = new List<(StreamMessage, int?)>();
 
-                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    while (await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
                     {
                         var ordinal = 0;
                         var streamId = reader.GetString(ordinal++);
@@ -105,6 +106,13 @@ namespace SqlStreamStore
                         filteredMessages.ToArray());
                 }
             }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
+            }
         }
 
         protected override async Task<ReadAllPage> ReadAllBackwardsInternal(
@@ -117,9 +125,10 @@ namespace SqlStreamStore
             maxCount = maxCount == int.MaxValue ? maxCount - 1 : maxCount;
             long position = fromPositionExclusive == Position.End ? long.MaxValue : fromPositionExclusive;
 
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken).NotOnCapturedContext();
 
                 var commandText = prefetch ? _scripts.ReadAllBackwardWithData : _scripts.ReadAllBackward;
                 using (var command = new SqlCommand(commandText, connection))
@@ -129,7 +138,7 @@ namespace SqlStreamStore
                     command.Parameters.AddWithValue("count", maxCount + 1); //Read extra row to see if at end or not
                     var reader = await command
                         .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
-                        .ConfigureAwait(false);
+                        .NotOnCapturedContext();
 
                     var messages = new List<(StreamMessage, int?)>();
                     if (!reader.HasRows)
@@ -146,7 +155,7 @@ namespace SqlStreamStore
                     }
 
                     long lastPosition = 0;
-                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    while (await reader.ReadAsync(cancellationToken).NotOnCapturedContext())
                     {
                         var ordinal = 0;
                         var streamId = reader.GetString(ordinal++);
@@ -207,14 +216,21 @@ namespace SqlStreamStore
                         filteredMessages.ToArray());
                 }
             }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
+            }
         }
     }
 
     internal static class SqlDataReaderExtensions
     {
-        internal static int? GetNullableInt32(this SqlDataReader reader, int ordinal)
-            => reader.IsDBNull(ordinal)
-                ? (int?) null
+        internal static int? GetNullableInt32(this SqlDataReader reader, int ordinal) 
+            => reader.IsDBNull(ordinal) 
+                ? (int?) null 
                 : reader.GetInt32(ordinal);
     }
 }
