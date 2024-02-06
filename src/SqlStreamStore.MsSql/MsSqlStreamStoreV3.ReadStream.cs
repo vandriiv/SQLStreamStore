@@ -8,6 +8,7 @@
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
 
     public partial class MsSqlStreamStoreV3
     {
@@ -19,9 +20,11 @@
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
+                var transaction = WithTransaction(connection);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 var(page, _) = await ReadStreamInternal(
                     streamIdInfo.SqlStreamId,
@@ -31,9 +34,22 @@
                     prefetch,
                     readNext,
                     connection,
-                    null,
+                    transaction,
                     cancellationToken);
+
+                if (_manageConnection)
+                {
+                    transaction.Dispose();
+                }
+
                 return page;
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
             }
         }
 
@@ -41,13 +57,15 @@
             string streamId,
             int start,
             int count,
-            bool prefetch,
+            bool prefetch, 
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
+                var transaction = WithTransaction(connection);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 var (page, _) = await ReadStreamInternal(
                     streamIdInfo.SqlStreamId,
@@ -57,9 +75,22 @@
                     prefetch,
                     readNext,
                     connection,
-                    null,
+                    transaction,
                     cancellationToken);
+
+                if (_manageConnection)
+                {
+                    transaction.Dispose();
+                }
+
                 return page;
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
             }
         }
 
@@ -74,7 +105,7 @@
             SqlTransaction transaction,
             CancellationToken cancellationToken)
         {
-            // If the count is int.MaxValue, TSql will see it as a negative number.
+            // If the count is int.MaxValue, TSql will see it as a negative number. 
             // Users shouldn't be using int.MaxValue in the first place anyway.
             count = count == int.MaxValue ? count - 1 : count;
 
@@ -86,17 +117,17 @@
             if(direction == ReadDirection.Forward)
             {
                 commandText = prefetch ? _scripts.ReadStreamForwardWithData : _scripts.ReadStreamForward;
-                getNextVersion = (events, lastVersion) =>
-                    events.Any()
-                        ? events.Last().Item1.StreamVersion + 1
+                getNextVersion = (events, lastVersion) => 
+                    events.Any() 
+                        ? events.Last().Item1.StreamVersion + 1 
                         : lastVersion + 1;
             }
             else
             {
                 commandText = prefetch ? _scripts.ReadStreamBackwardWithData : _scripts.ReadStreamBackward;
                 getNextVersion = (events, lastVersion) =>
-                    events.Any()
-                        ? events.Last().Item1.StreamVersion - 1
+                    events.Any() 
+                        ? events.Last().Item1.StreamVersion - 1 
                         : -1;
             }
 
@@ -107,11 +138,9 @@
                 command.Parameters.AddWithValue("count", count + 1); //Read extra row to see if at end or not
                 command.Parameters.AddWithValue("streamVersion", streamVersion);
 
-                using(var reader = await command
-                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
-                    .ConfigureAwait(false))
+                using(var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken))
                 {
-                    await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    await reader.ReadAsync(cancellationToken);
                     if(await reader.IsDBNullAsync(0, cancellationToken).ConfigureAwait(false))
                     {
                         return (new ReadStreamPage(
@@ -119,7 +148,7 @@
                               PageReadStatus.StreamNotFound,
                               start,
                               -1,
-                              -1,
+                              -1, 
                               -1,
                               direction,
                               true,
@@ -131,9 +160,9 @@
                     var maxAge = reader.GetNullableInt32(2);
                     var maxCount = reader.GetNullableInt32(3);
 
-                    await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                    await reader.NextResultAsync(cancellationToken);
                     var messages = new List<(StreamMessage, int?)>();
-                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    while (await reader.ReadAsync(cancellationToken))
                     {
                         if(messages.Count == count)
                         {
@@ -201,27 +230,31 @@
 
         private async Task<string> GetJsonData(string streamId, int streamVersion, CancellationToken cancellationToken)
         {
-            using (var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 using (var command = new SqlCommand(_scripts.ReadMessageData, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = streamId });
                     command.Parameters.AddWithValue("streamVersion", streamVersion);
 
-                    using (var reader = await command
-                        .ExecuteReaderAsync(
-                            CommandBehavior.SequentialAccess | CommandBehavior.SingleRow,
-                            cancellationToken)
-                        .ConfigureAwait(false))
+                    using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleRow, cancellationToken))
                     {
-                        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        if (await reader.ReadAsync(cancellationToken))
                         {
                             return await reader.GetTextReader(0).ReadToEndAsync();
                         }
                         return null;
                     }
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }

@@ -4,6 +4,7 @@ namespace SqlStreamStore
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
+    using SqlStreamStore.Infrastructure;
     using SqlStreamStore.Streams;
 
     partial class MsSqlStreamStoreV3
@@ -20,18 +21,19 @@ namespace SqlStreamStore
                 afterIdInternal = -1;
             }
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
                 var streamIds = new List<string>();
 
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                using(var transaction = connection.BeginTransaction())
+                await connection.OpenIfRequiredAsync(cancellationToken);
+                var transaction = WithTransaction(connection);
                 using(var command = GetListStreamsCommand(pattern, maxCount, afterIdInternal, transaction))
                 {
                     command.CommandTimeout = _commandTimeout;
-                    using(var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                    using(var reader = await command.ExecuteReaderAsync(cancellationToken))
                     {
-                        while(await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        while(await reader.ReadAsync(cancellationToken))
                         {
                             streamIds.Add(reader.GetString(0));
                             afterIdInternal = reader.GetInt32(1);
@@ -40,6 +42,13 @@ namespace SqlStreamStore
                 }
 
                 return new ListStreamsPage(afterIdInternal.ToString(), streamIds.ToArray(), listNextStreamsPage);
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
             }
         }
 

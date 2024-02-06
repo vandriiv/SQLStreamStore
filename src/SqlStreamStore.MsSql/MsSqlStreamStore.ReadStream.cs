@@ -8,6 +8,7 @@
     using System.Threading.Tasks;
     using Microsoft.Data.SqlClient;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
 
     public partial class MsSqlStreamStore
     {
@@ -21,7 +22,7 @@
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(
                     streamIdInfo.SqlStreamId,
@@ -40,13 +41,13 @@
             string streamId,
             int start,
             int count,
-            bool prefetch,
+            bool prefetch, 
             ReadNextStreamPage readNext,
             CancellationToken cancellationToken)
         {
             using (var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 return await ReadStreamInternal(
                     streamIdInfo.SqlStreamId,
@@ -72,7 +73,7 @@
             SqlTransaction transaction,
             CancellationToken cancellationToken)
         {
-            // If the count is int.MaxValue, TSql will see it as a negative number.
+            // If the count is int.MaxValue, TSql will see it as a negative number. 
             // Users shouldn't be using int.MaxValue in the first place anyway.
             count = count == int.MaxValue ? count - 1 : count;
 
@@ -113,10 +114,9 @@
                 command.Parameters.AddWithValue("streamVersion", streamVersion);
 
                 using(var reader = await command
-                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken)
-                    .ConfigureAwait(false))
+                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess, cancellationToken))
                 {
-                    await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                    await reader.ReadAsync(cancellationToken);
                     if(reader.IsDBNull(0))
                     {
                         return new ReadStreamPage(
@@ -124,7 +124,7 @@
                               PageReadStatus.StreamNotFound,
                               start,
                               -1,
-                              -1,
+                              -1, 
                               -1,
                               direction,
                               true,
@@ -133,9 +133,9 @@
                     var lastStreamVersion = reader.GetInt32(0);
                     var lastStreamPosition = reader.GetInt64(1);
 
-                    await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+                    await reader.NextResultAsync(cancellationToken);
                     var messages = new List<StreamMessage>();
-                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    while (await reader.ReadAsync(cancellationToken))
                     {
                         if(messages.Count == count)
                         {
@@ -201,20 +201,16 @@
         {
             using(var connection = _createConnection())
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 using(var command = new SqlCommand(_scripts.ReadMessageData, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = streamId });
                     command.Parameters.AddWithValue("streamVersion", streamVersion);
 
-                    using(var reader = await command
-                        .ExecuteReaderAsync(
-                            CommandBehavior.SequentialAccess | CommandBehavior.SingleRow,
-                            cancellationToken)
-                        .ConfigureAwait(false))
+                    using(var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleRow, cancellationToken))
                     {
-                        if(await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        if(await reader.ReadAsync(cancellationToken))
                         {
                             return await reader.GetTextReader(0).ReadToEndAsync();
                         }

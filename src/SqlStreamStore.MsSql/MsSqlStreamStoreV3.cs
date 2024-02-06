@@ -29,6 +29,7 @@
         public const int FirstSchemaVersion = 1;
         public const int CurrentSchemaVersion = 3;
 
+
         /// <summary>
         ///     Initializes a new instance of <see cref="MsSqlStreamStoreV3"/>
         /// </summary>
@@ -69,6 +70,7 @@
 
             _appendToStreamSqlMetadata = sqlMetaData.ToArray();
             _commandTimeout = settings.CommandTimeout;
+            _manageConnection = settings.ScopeTransaction == null;
         }
 
         /// <summary>
@@ -82,13 +84,14 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
-                if(_scripts.Schema != "dbo")
+                if (_scripts.Schema != "dbo")
                 {
-                    using(var command = new SqlCommand($@"
+                    using (var command = new SqlCommand($@"
                         IF NOT EXISTS (
                         SELECT  schema_name
                         FROM    information_schema.schemata
@@ -101,7 +104,7 @@
                         command.CommandTimeout = _commandTimeout;
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
-                            .ConfigureAwait(false);
+                            ;
                     }
                 }
 
@@ -110,7 +113,14 @@
                     command.CommandTimeout = _commandTimeout;
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -125,16 +135,17 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using (var command = new SqlCommand(_scripts.GetSchemaVersion, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     var extendedProperties =  await command
                         .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
 
                     int? version = null;
                     while(await extendedProperties.ReadAsync(cancellationToken))
@@ -147,9 +158,16 @@
                         break;
                     }
 
-                    return version == null
+                    return version == null 
                         ? new CheckSchemaResult(FirstSchemaVersion, CurrentSchemaVersion)  // First schema (1) didn't have extended properties.
                         : new CheckSchemaResult(int.Parse(version.ToString()), CurrentSchemaVersion);
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -163,16 +181,24 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.DropAll, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     await command
                         .ExecuteNonQueryAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -183,11 +209,12 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
-                using(var command = new SqlCommand(_scripts.GetStreamMessageCount, connection))
+                using (var command = new SqlCommand(_scripts.GetStreamMessageCount, connection))
                 {
                     var streamIdInfo = new StreamIdInfo(streamId);
                     command.CommandTimeout = _commandTimeout;
@@ -195,9 +222,16 @@
 
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
 
-                    return (int) result;
+                    return (int)result;
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -208,7 +242,7 @@
         ///      performance reasons. This modifies the schema and iterates over
         ///      all streams lifting `MaxAge` and `MaxCount` if the stream has
         ///      metadata. Migration progress is logged and reported.
-        ///
+        /// 
         ///      As usual, ensure you have the database backed up.
         ///  </summary>
         /// <param name="progress">A provider that can receive progress updates.</param>
@@ -237,18 +271,27 @@
                 progress.Report(new MigrateProgress(MigrateProgress.MigrateStage.SchemaVersionChecked));
 
                 // Migrate the schema
-                using (var connection = _createConnection())
+                var migrateConnection = _createConnection();
+                try
                 {
-                    await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                    await migrateConnection.OpenIfRequiredAsync(cancellationToken);
 
-                    using(var command = new SqlCommand(_scripts.Migration_v3, connection))
+                    using(var command = new SqlCommand(_scripts.Migration_v3, migrateConnection))
                     {
                         command.CommandTimeout = _commandTimeout;
                         await command
                             .ExecuteNonQueryAsync(cancellationToken)
-                            .ConfigureAwait(false);
+                            ;
                     }
                 }
+                finally
+                {
+                    if (_manageConnection)
+                    {
+                        migrateConnection.Dispose();
+                    }
+                }
+
                 progress.Report(new MigrateProgress(MigrateProgress.MigrateStage.SchemaMigrated));
 
                 // Load up the stream IDs that have metadata.
@@ -282,10 +325,10 @@
                     if(metadata != null)
                     {
                         Logger.Info("Migrating stream {streamId} ({current}/{total}", streamId, i, streamIds.Count);
-
-                        using (var connection = _createConnection())
+                        var connection = _createConnection();
+                        try
                         {
-                            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                            await connection.OpenIfRequiredAsync(cancellationToken);
 
                             using(var command = new SqlCommand(_scripts.SetStreamMetadata, connection))
                             {
@@ -297,6 +340,13 @@
                                 command.Parameters.Add("maxCount", SqlDbType.Int);
                                 command.Parameters["maxCount"].Value = (object)metadata.MaxCount ?? DBNull.Value;
                                 await command.ExecuteNonQueryAsync(cancellationToken);
+                            }
+                        }
+                        finally
+                        {
+                            if (_manageConnection)
+                            {
+                                connection.Dispose();
                             }
                         }
                     }
@@ -315,16 +365,17 @@
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadHeadPosition, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
 
                     if(result == DBNull.Value)
                     {
@@ -333,40 +384,57 @@
                     return (long) result;
                 }
             }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
+            }
         }
 
         protected override async Task<long> ReadStreamHeadPositionInternal(string streamId, CancellationToken cancellationToken)
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
-                using(var command = new SqlCommand(_scripts.ReadStreamHeadPosition, connection))
+                using (var command = new SqlCommand(_scripts.ReadStreamHeadPosition, connection))
                 {
                     command.CommandTimeout = _commandTimeout;
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = new StreamIdInfo(streamId).SqlStreamId.Id });
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
 
-                    if(result == null)
+                    if (result == null)
                     {
                         return Position.End;
                     }
-                    return (long) result;
+                    return (long)result;
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
+
 
         protected override async Task<int> ReadStreamHeadVersionInternal(string streamId, CancellationToken cancellationToken)
         {
             GuardAgainstDisposed();
 
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
 
                 using(var command = new SqlCommand(_scripts.ReadStreamHeadVersion, connection))
                 {
@@ -374,13 +442,20 @@
                     command.Parameters.Add(new SqlParameter("streamId", SqlDbType.Char, 42) { Value = new StreamIdInfo(streamId).SqlStreamId.Id });
                     var result = await command
                         .ExecuteScalarAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
 
                     if(result == null)
                     {
                         return StreamVersion.End;
                     }
                     return (int) result;
+                }
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
                 }
             }
         }
@@ -406,64 +481,6 @@
         public string GetSchemaCreationScript()
         {
             return _scripts.CreateSchema;
-        }
-
-
-        /// <summary> Grant the necessary access for Read operations, adds the user to 'db_datareader' database roles </summary>
-        public async Task GrantRead (string to, CancellationToken cancellationToken = default)
-        {
-            GuardAgainstDisposed();
-            using (var connection = _createConnection())
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                await GrantReadInternal(to, connection, cancellationToken);
-            }
-        }
-        /// <summary> Grants the necessary access for Append operations, adds the user to 'db_datareader', 'db_datawriter' database roles and Execute permission on User Defined Table 'NewStreamMessages'  </summary>
-        public async Task GrantAppend(string to, CancellationToken cancellationToken = default)
-        {
-            GuardAgainstDisposed();
-            using (var connection = _createConnection())
-            {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-                await GrantAppendInternal(to, connection, cancellationToken);
-                await GrantReadInternal(to, connection, cancellationToken);
-            }
-        }
-
-        private async Task GrantReadInternal(string to, SqlConnection connection, CancellationToken cancellationToken)
-        {
-            using (var command = new SqlCommand("sp_addrolemember", connection))
-            {
-                command.CommandTimeout = _commandTimeout;
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.Add(new SqlParameter("@rolename", "db_datareader"));
-                command.Parameters.Add(new SqlParameter("@membername", to));
-                await command
-                    .ExecuteNonQueryAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
-        private async Task GrantAppendInternal(string to, SqlConnection connection, CancellationToken cancellationToken)
-        {
-            using(var command = new SqlCommand($"GRANT EXECUTE ON TYPE::[{_settings.Schema}].[NewStreamMessages] TO [{to}]",
-                connection))
-            {
-                command.CommandTimeout = _commandTimeout;
-                await command
-                    .ExecuteNonQueryAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            using (var command = new SqlCommand("sp_addrolemember", connection))
-            {
-                command.CommandTimeout = _commandTimeout;
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.Add(new SqlParameter("@rolename", "db_datawriter"));
-                command.Parameters.Add(new SqlParameter("@membername", to));
-                await command
-                    .ExecuteNonQueryAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            }
         }
     }
 }

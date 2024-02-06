@@ -10,6 +10,7 @@
     using Microsoft.Data.SqlClient.Server;
     using SqlStreamStore.Imports.Ensure.That;
     using SqlStreamStore.Streams;
+    using SqlStreamStore.Infrastructure;
 
     public partial class MsSqlStreamStoreV3
     {
@@ -45,17 +46,25 @@
             GuardAgainstDisposed();
 
             MsSqlAppendResult result;
-            using(var connection = _createConnection())
+            var connection = _createConnection();
+            try
             {
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                await connection.OpenIfRequiredAsync(cancellationToken);
                 var streamIdInfo = new StreamIdInfo(streamId);
                 result = await AppendToStreamInternal(
                     connection,
-                    null,
+                    _settings.ScopeTransaction,
                     streamIdInfo.SqlStreamId,
                     expectedVersion,
                     messages,
                     cancellationToken);
+            }
+            finally
+            {
+                if (_manageConnection)
+                {
+                    connection.Dispose();
+                }
             }
 
             if(result.MaxCount.HasValue && result.MaxCount.Value > 0)
@@ -171,11 +180,9 @@
 
                 try
                 {
-                    using(var reader = await command
-                        .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                    using(var reader = await command.ExecuteReaderAsync(cancellationToken))
                     {
-                        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.ReadAsync(cancellationToken);
 
                         var currentVersion = reader.GetInt32(0);
                         var currentPosition = reader.GetInt64(1);
@@ -208,7 +215,7 @@
                         connection,
                         transaction,
                         cancellationToken)
-                        .ConfigureAwait(false);
+                        ;
 
                     if(messages.Length > page.Messages.Length)
                     {
@@ -278,11 +285,9 @@
 
                 try
                 {
-                    using(var reader = await command
-                        .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                    using(var reader = await command.ExecuteReaderAsync(cancellationToken))
                     {
-                        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.ReadAsync(cancellationToken);
 
                         var currentVersion = reader.GetInt32(0);
                         var currentPosition = reader.GetInt64(1);
@@ -308,7 +313,7 @@
                                 connection,
                                 transaction,
                                 cancellationToken)
-                            .ConfigureAwait(false);
+                            ;
 
                         if(messages.Length > page.Messages.Length)
                         {
@@ -372,11 +377,9 @@
 
                 try
                 {
-                    using (var reader = await command
-                        .ExecuteReaderAsync(cancellationToken)
-                        .ConfigureAwait(false))
+                    using (var reader = await command.ExecuteReaderAsync(cancellationToken))
                     {
-                        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                        await reader.ReadAsync(cancellationToken);
 
                         var currentVersion = reader.GetInt32(0);
                         var currentPosition = reader.GetInt64(1);
@@ -485,7 +488,7 @@
                 command.Parameters.AddWithValue("messageId", messageId);
 
                 var result = await command.ExecuteScalarAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                    ;
 
                 return (int) result;
             }

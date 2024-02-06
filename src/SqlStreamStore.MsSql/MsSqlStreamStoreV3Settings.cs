@@ -25,6 +25,12 @@ namespace SqlStreamStore
             ConnectionString = connectionString;
         }
 
+        public MsSqlStreamStoreV3Settings(string connectionString, SqlTransaction sqlTransaction)
+            : this(connectionString)
+        {
+            ScopeTransaction = sqlTransaction;
+        }
+
         /// <summary>
         ///     Gets the connection string.
         /// </summary>
@@ -90,5 +96,7 @@ namespace SqlStreamStore
                 _commandTimeout = value;
             }
         }
+
+        public SqlTransaction ScopeTransaction { get; }
     }
 }
